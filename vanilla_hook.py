@@ -1,4 +1,5 @@
 #%%
+import os
 from typing import List, Tuple, Dict, Any, Optional
 import torch
 from torch import nn
@@ -7,6 +8,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import List, Tuple, Callable
 from functools import partial
+
+import torch
+from transformers import LlamaForCausalLM, LlamaTokenizer
+from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+from huggingface_hub import snapshot_download
 
 
 @dataclass
@@ -63,74 +69,54 @@ class HookedModule(nn.Module):
         return self.model(*args, **kwargs)
 
 
-# if __name__ == "__main__":
-#     bert_model = AutoModel.from_pretrained("bert-base-uncased")
-#     hooked_model = HookedModule(bert_model)
-#     hooked_model.print_model_structure()
+def save_activations(prompt, prompt_id):
+    #### model loading
+    checkpoint_location = snapshot_download("decapoda-research/llama-7b-hf")
+    with init_empty_weights():  # Takes up near zero memory
+        model = LlamaForCausalLM.from_pretrained(checkpoint_location)
+    model = load_checkpoint_and_dispatch(
+        model,
+        checkpoint_location,
+        device_map="auto",
+        dtype=torch.float16,
+        no_split_module_classes=["LlamaDecoderLayer"],
+    )
+    tok = LlamaTokenizer.from_pretrained(checkpoint_location)
+    ####
+    token_ids = tok(prompt, return_tensors="pt").to(model.device)
+    #output = model(**token_ids)
 
-#     def example_hook(module, input, output):
-#         print(f"Hook called with tensor of shape: {output.shape}")
+    hmodel = HookedModule(model)
+    # Print out the names modules you can add hooks to
+    #hmodel.print_model_structure()
 
-#     def example_hook2(module, input, output):
-#         print(f"Hook2 called with tensor output shape {output[0].shape}")
+    def caching_hook_fnc(module, input, output, name=""):
+        print("Hooking:", name)
+        torch.save(output[0].detach(), f"os.getcwd()/data/{prompt_id}/{name}")
 
-#     tok = AutoTokenizer.from_pretrained("bert-base-uncased")
-#     input_ids = torch.tensor([[101, 2054, 2003, 2026, 2171, 102]])
+    hook_pairs = []
+    for layer in range(model.config.num_hidden_layers):
+        for mat in ["q","v"]:
+            act_name = f"model.layers.{layer}.self_attn.{mat}_proj"
+            hook_pairs.append((act_name, partial(caching_hook_fnc, name=act_name)))
 
-#     with hooked_model.hooks(fwd=[('encoder.layer.0.attention.self.query', example_hook)]):
-#         output = hooked_model(input_ids)
-#         with hooked_model.hooks(fwd=[('encoder.layer.9.output.dense', example_hook2)]):
-#             output = hooked_model(input_ids)
-#         output = hooked_model(input_ids)
+    with hmodel.hooks(fwd=hook_pairs):
+        output = hmodel(**token_ids)
 
-#%%
-import torch
-from transformers import LlamaForCausalLM, LlamaTokenizer
-from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-from huggingface_hub import snapshot_download
-
-checkpoint_location = snapshot_download("decapoda-research/llama-7b-hf")
-
-with init_empty_weights():  # Takes up near zero memory
-    model = LlamaForCausalLM.from_pretrained(checkpoint_location)
-
-model = load_checkpoint_and_dispatch(
-    model,
-    checkpoint_location,
-    device_map="auto",
-    dtype=torch.float16,
-    no_split_module_classes=["LlamaDecoderLayer"],
-)
-
-tok = LlamaTokenizer.from_pretrained(checkpoint_location)
+    return output
+    #completion = model.generate(**token_ids, max_new_tokens=30,)
+    #print(tok.batch_decode(completion)[0])
 
 
-#%%
-text = """Mary: I went to the doctor's the other day.
-John: What did he say?"""
+if __name__ == "__main__":
+    prompt = '''Alex: "Hi, Bob!"
 
-token_ids = tok(text, return_tensors="pt").to(model.device)
-output = model(**token_ids)
+Bob: "Hey, Alex. How's your day going?"
 
-#%%
-hmodel = HookedModule(model)
-# Print out the names modules you can add hooks to
-# hmodel.print_model_structure()
+Alex: "Not bad, thanks. Yours?"
 
-#%%
-cache = {}
-
-def caching_hook_fnc(module, input, output, name=""):
-    print("Hooking:", name)
-    cache[name] = output[0].detach()
+Bob:'''
+    prompt_id = "1"
 
 
-hook_pairs = [
-    ("model.layers.31.self_attn", partial(caching_hook_fnc, name="model.layers.31.self_attn")),
-]
-
-with hmodel.hooks(fwd=hook_pairs):
-    output = hmodel(**token_ids)
-
-#%%
-cache['model.layers.31.self_attn'].shape
+    output = save_activations(prompt, prompt_id)

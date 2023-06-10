@@ -19,14 +19,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # %%
-#checkpoint_location = snapshot_download("decapoda-research/llama-7b-hf")
-#tok = LlamaTokenizer.from_pretrained(checkpoint_location)
-#tok.add_special_tokens({'pad_token': '[PAD]'})
-#cfg = get_pretrained_model_config(model_name="llama-7b-hf")
-#cfg.dtype = torch.float16
-#model = HookedTransformer(cfg, tok)
+checkpoint_location = snapshot_download("decapoda-research/llama-7b-hf")
+tok = LlamaTokenizer.from_pretrained(checkpoint_location)
+tok.add_special_tokens({'pad_token': '[PAD]'})
+cfg = get_pretrained_model_config(model_name="llama-7b-hf")
+cfg.dtype = torch.float16
+model = HookedTransformer(cfg, tok)
 
-model = HookedTransformer.from_pretrained("roneneldan/TinyStories-2Layers-33M")
+#model = HookedTransformer.from_pretrained("roneneldan/TinyStories-2Layers-33M")
 
 # %%
 
