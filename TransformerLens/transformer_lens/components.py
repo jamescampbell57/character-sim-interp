@@ -660,7 +660,7 @@ class Attention(nn.Module):
             freq = einops.repeat(freq, "d -> (d 2)")
         # Create a n_ctx x rotary_dim tensor, where each column is an arithmetic sequence of angles in that frequency
         angles = pos[:, None] / freq[None, :]
-        return torch.sin(angles.to(torch.bfloat16)).to(torch.float16), torch.cos(angles.to(torch.bfloat16)).to(torch.float16)
+        return torch.sin(angles), torch.cos(angles)
 
     def rotate_every_two(
         self, x: Float[torch.Tensor, "... rotary_dim"]

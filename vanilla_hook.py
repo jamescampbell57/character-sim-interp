@@ -68,10 +68,8 @@ class HookedModule(nn.Module):
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
 
-
-def save_activations(prompt, prompt_id):
-    #### model loading
-    checkpoint_location = snapshot_download("decapoda-research/llama-7b-hf")
+def efficient_model_loading(): #can change to cache model weights on disk
+    checkpoint_location = snapshot_download("decapoda-research/llama-30b-hf")
     with init_empty_weights():  # Takes up near zero memory
         model = LlamaForCausalLM.from_pretrained(checkpoint_location)
     model = load_checkpoint_and_dispatch(
@@ -82,6 +80,13 @@ def save_activations(prompt, prompt_id):
         no_split_module_classes=["LlamaDecoderLayer"],
     )
     tok = LlamaTokenizer.from_pretrained(checkpoint_location)
+    return model, tok #returns by-reference
+
+
+
+def save_activations(prompt, prompt_id):
+    #### model loading
+    model, tok = efficient_model_loading()
     ####
     token_ids = tok(prompt, return_tensors="pt").to(model.device)
     #output = model(**token_ids)
@@ -107,6 +112,19 @@ def save_activations(prompt, prompt_id):
     #completion = model.generate(**token_ids, max_new_tokens=30,)
     #print(tok.batch_decode(completion)[0])
 
+def talk(prompt, num_tokens=30):
+    model, tok = efficient_model_loading()
+    token_ids = tok(prompt, return_tensors="pt").to(model.device)
+    completion = model.generate(**token_ids, max_new_tokens=num_tokens,)
+    output = tok.batch_decode(completion)[0]
+    return output
+
+def speak(prompt, num_tokens):
+    token_ids = tok(prompt, return_tensors="pt").to(model.device)
+    completion = model.generate(**token_ids, max_new_tokens=num_tokens,)
+    output = tok.batch_decode(completion)[0]
+    print(output)
+
 
 if __name__ == "__main__":
     prompt = '''Alex: "Hi, Bob!"
@@ -116,7 +134,13 @@ Bob: "Hey, Alex. How's your day going?"
 Alex: "Not bad, thanks. Yours?"
 
 Bob:'''
-    prompt_id = "1"
+    num_tokens = 50
+    model, tok = efficient_model_loading()
+    token_ids = tok(prompt, return_tensors="pt").to(model.device)
+    completion = model.generate(**token_ids, max_new_tokens=num_tokens,)
+    output = tok.batch_decode(completion)[0]
+    print(output)
 
 
-    output = save_activations(prompt, prompt_id)
+    #prompt_id = "1"
+    #output = save_activations(prompt, prompt_id)
