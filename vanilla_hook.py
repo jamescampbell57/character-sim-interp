@@ -69,7 +69,8 @@ class HookedModule(nn.Module):
         return self.model(*args, **kwargs)
 
 def efficient_model_loading(): #can change to cache model weights on disk
-    checkpoint_location = snapshot_download("decapoda-research/llama-30b-hf")
+    #checkpoint_location = snapshot_download("decapoda-research/llama-30b-hf")
+    checkpoint_location = f"{os.getcwd()}/vicuna-weights"
     with init_empty_weights():  # Takes up near zero memory
         model = LlamaForCausalLM.from_pretrained(checkpoint_location)
     model = load_checkpoint_and_dispatch(
