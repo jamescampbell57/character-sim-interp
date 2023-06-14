@@ -87,7 +87,7 @@ def efficient_model_loading(): #can change to cache model weights on disk
 
 def save_activations(prompt, prompt_id):
     #### model loading
-    model, tok = efficient_model_loading()
+    #model, tok = efficient_model_loading()
     ####
     token_ids = tok(prompt, return_tensors="pt").to(model.device)
     #output = model(**token_ids)
@@ -98,11 +98,14 @@ def save_activations(prompt, prompt_id):
 
     def caching_hook_fnc(module, input, output, name=""):
         print("Hooking:", name)
-        torch.save(output[0].detach(), f"os.getcwd()/data/{prompt_id}/{name}")
+        save_path = f"{os.getcwd()}/data/prompt-{prompt_id}"
+        if not os.path.exists(save_path):
+            os.system(f"mkdir {save_path}")
+        torch.save(output[0].detach(), f"{save_path}/{name}")
 
     hook_pairs = []
     for layer in range(model.config.num_hidden_layers):
-        for mat in ["q","v"]:
+        for mat in ["q","k"]:
             act_name = f"model.layers.{layer}.self_attn.{mat}_proj"
             hook_pairs.append((act_name, partial(caching_hook_fnc, name=act_name)))
 
